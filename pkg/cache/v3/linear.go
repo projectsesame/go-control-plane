@@ -204,6 +204,23 @@ func (cache *LinearCache) UpdateResource(name string, res types.Resource) error 
 	return nil
 }
 
+func (cache *LinearCache) UpdateResourceWithVersion(name string, res types.Resource) (uint64, error) {
+	if res == nil {
+		return 0, errors.New("nil resource")
+	}
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+
+	cache.version++
+	cache.versionVector[name] = cache.version
+	cache.resources[name] = res
+
+	// TODO: batch watch closures to prevent rapid updates
+	cache.notifyAll(map[string]struct{}{name: {}})
+
+	return cache.version, nil
+}
+
 // DeleteResource removes a resource in the collection.
 func (cache *LinearCache) DeleteResource(name string) error {
 	cache.mu.Lock()
