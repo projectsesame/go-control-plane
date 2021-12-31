@@ -389,6 +389,10 @@ func (cache *LinearCache) getVersion() string {
 	return cache.versionPrefix + strconv.FormatUint(cache.version, 10)
 }
 
+func (cache *LinearCache) GetVersion() string {
+	return cache.versionPrefix + strconv.FormatUint(cache.version, 10)
+}
+
 // cancellation function for cleaning stale watches
 func (cache *LinearCache) cancelDeltaWatch(watchID int64) func() {
 	return func() {
