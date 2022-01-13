@@ -57,6 +57,9 @@ type SnapshotCache interface {
 	// GetStatusInfo retrieves status information for a node ID.
 	GetStatusInfo(string) StatusInfo
 
+	// UpdateNode replace node for a node ID
+	UpdateNode(nodeId string, request *Request) bool
+
 	// GetStatusKeys retrieves node IDs for all statuses.
 	GetStatusKeys() []string
 }
