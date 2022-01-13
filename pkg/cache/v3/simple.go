@@ -555,6 +555,18 @@ func (cache *snapshotCache) GetStatusInfo(node string) StatusInfo {
 	return info
 }
 
+func (cache *snapshotCache) UpdateNode(nodeId string, request *Request) bool {
+	cache.mu.RLock()
+	defer cache.mu.RUnlock()
+	info, exists := cache.status[nodeId]
+	if !exists {
+		cache.log.Warnf("node does not exist")
+		return false
+	}
+	info.UpdateNode(request.Node)
+	return true
+}
+
 // GetStatusKeys retrieves all node IDs in the status map.
 func (cache *snapshotCache) GetStatusKeys() []string {
 	cache.mu.RLock()

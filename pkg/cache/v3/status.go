@@ -166,3 +166,9 @@ func (info *statusInfo) SetDeltaResponseWatch(id int64, drw DeltaResponseWatch) 
 	defer info.mu.Unlock()
 	info.deltaWatches[id] = drw
 }
+
+func (info *statusInfo) UpdateNode(node *core.Node) {
+	info.mu.Lock()
+	defer info.mu.Unlock()
+	info.node = node
+}
