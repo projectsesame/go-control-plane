@@ -85,6 +85,8 @@ type Response interface {
 	// Get the version in the Response.
 	GetVersion() (string, error)
 
+	GetSnapshotVersion() (string, error)
+
 	// Get the context provided during response creation.
 	GetContext() context.Context
 }
@@ -118,6 +120,9 @@ type RawResponse struct {
 	// Version of the resources as tracked by the cache for the given type.
 	// Proxy responds with this version as an acknowledgement.
 	Version string
+
+	//SnapshotVersion
+	SnapshotVersion string
 
 	// Resources to be included in the response.
 	Resources []types.ResourceWithTTL
@@ -287,6 +292,10 @@ func (r *RawResponse) GetVersion() (string, error) {
 	return r.Version, nil
 }
 
+func (r *RawResponse) GetSnapshotVersion() (string, error) {
+	return r.SnapshotVersion, nil
+}
+
 // GetSystemVersion returns the raw SystemVersion
 func (r *RawDeltaResponse) GetSystemVersion() (string, error) {
 	return r.SystemVersionInfo, nil
@@ -354,6 +363,10 @@ func (r *PassthroughResponse) GetVersion() (string, error) {
 }
 func (r *PassthroughResponse) GetContext() context.Context {
 	return r.ctx
+}
+
+func (r *PassthroughResponse) GetSnapshotVersion() (string, error) {
+	return "", fmt.Errorf("not implement")
 }
 
 // GetSystemVersion returns the response version.
