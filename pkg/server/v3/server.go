@@ -128,6 +128,13 @@ func (c CallbackFuncs) OnStreamResponse(ctx context.Context, streamID int64, req
 	}
 }
 
+// OnStreamResponse invokes StreamResponseFunc.
+func (c CallbackFuncs) OnStreamResponseWithSnapshotVersion(ctx context.Context, streamID int64, req *discovery.DiscoveryRequest, resp *discovery.DiscoveryResponse, snapshotVersion string) {
+	if c.StreamResponseFunc != nil {
+		c.StreamResponseFunc(ctx, streamID, req, resp)
+	}
+}
+
 // OnStreamDeltaRequest invokes StreamDeltaResponseFunc
 func (c CallbackFuncs) OnStreamDeltaRequest(streamID int64, req *discovery.DeltaDiscoveryRequest) error {
 	if c.StreamDeltaRequestFunc != nil {

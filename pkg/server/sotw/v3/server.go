@@ -47,6 +47,8 @@ type Callbacks interface {
 	OnStreamRequest(int64, *discovery.DiscoveryRequest) error
 	// OnStreamResponse is called immediately prior to sending a response on a stream.
 	OnStreamResponse(context.Context, int64, *discovery.DiscoveryRequest, *discovery.DiscoveryResponse)
+
+	OnStreamResponseWithSnapshotVersion(context.Context, int64, *discovery.DiscoveryRequest, *discovery.DiscoveryResponse, string)
 }
 
 // NewServer creates handlers from a config watcher and callbacks.
@@ -206,7 +208,8 @@ func (s *server) process(stream Stream, reqCh <-chan *discovery.DiscoveryRequest
 		lastDiscoveryResponses[resp.GetRequest().TypeUrl] = lastResponse
 
 		if s.callbacks != nil {
-			s.callbacks.OnStreamResponse(resp.GetContext(), streamID, resp.GetRequest(), out)
+			snapshotVersion, _ := resp.GetSnapshotVersion()
+			s.callbacks.OnStreamResponseWithSnapshotVersion(resp.GetContext(), streamID, resp.GetRequest(), out, snapshotVersion)
 		}
 		return out.Nonce, stream.Send(out)
 	}
