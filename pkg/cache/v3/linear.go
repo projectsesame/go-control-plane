@@ -17,14 +17,14 @@ package cache
 import (
 	"context"
 	"errors"
+	"github.com/envoyproxy/go-control-plane/pkg/cache/types"
+	"github.com/envoyproxy/go-control-plane/pkg/log"
+	"github.com/envoyproxy/go-control-plane/pkg/server/stream/v3"
+	"github.com/google/uuid"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
-
-	"github.com/envoyproxy/go-control-plane/pkg/cache/types"
-	"github.com/envoyproxy/go-control-plane/pkg/log"
-	"github.com/envoyproxy/go-control-plane/pkg/server/stream/v3"
 )
 
 type watches = map[chan Response]struct{}
@@ -168,6 +168,36 @@ func (cache *LinearCache) notifyAll(modified map[string]struct{}, snapshotVersio
 	}
 }
 
+func (cache *LinearCache) notifyAllForCds(modified map[string]struct{}, snapshotVersion string) {
+	// de-duplicate watches that need to be responded
+	notifyList := make(map[chan Response][]string)
+	for name := range modified {
+		for watch := range cache.watches[name] {
+			notifyList[watch] = append(notifyList[watch], name)
+		}
+		delete(cache.watches, name)
+	}
+	for value, stale := range notifyList {
+		cache.respond(value, stale, snapshotVersion)
+	}
+	for value := range cache.watchAll {
+		cache.respond(value, nil, snapshotVersion)
+	}
+	cache.watchAll = make(watches)
+
+	err := cache.updateVersionMapByForce(modified)
+	if err != nil {
+		cache.log.Errorf("failed to update version map: %v", err)
+	}
+
+	for id, watch := range cache.deltaWatches {
+		res := cache.respondDelta(watch.Request, watch.Response, watch.StreamState)
+		if res != nil {
+			delete(cache.deltaWatches, id)
+		}
+	}
+}
+
 func (cache *LinearCache) respondDelta(request *DeltaRequest, value chan DeltaResponse, state stream.StreamState) *RawDeltaResponse {
 	resp := createDeltaResponse(context.Background(), request, state, resourceContainer{
 		resourceMap:   cache.resources,
@@ -201,6 +231,23 @@ func (cache *LinearCache) UpdateResource(name string, res types.Resource) error 
 
 	// TODO: batch watch closures to prevent rapid updates
 	cache.notifyAll(map[string]struct{}{name: {}}, "")
+
+	return nil
+}
+
+func (cache *LinearCache) UpdateResourceForCds(name string, res types.Resource) error {
+	if res == nil {
+		return errors.New("nil resource")
+	}
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	cache.version++
+
+	cache.versionVector[name] = cache.version
+	cache.resources[name] = res
+
+	// TODO: batch watch closures to prevent rapid updates
+	cache.notifyAllForCds(map[string]struct{}{name: {}}, "")
 
 	return nil
 }
@@ -389,6 +436,33 @@ func (cache *LinearCache) updateVersionMap(modified map[string]struct{}) error {
 			return err
 		}
 		v := HashResource(marshaledResource)
+		if v == "" {
+			return errors.New("failed to build resource version")
+		}
+
+		cache.versionMap[GetResourceName(r)] = v
+	}
+	for name := range modified {
+		if r, ok := cache.resources[name]; !ok {
+			delete(cache.versionMap, GetResourceName(r))
+		}
+	}
+	return nil
+}
+
+func (cache *LinearCache) updateVersionMapByForce(modified map[string]struct{}) error {
+	for name, r := range cache.resources {
+		// skip recalculating hash for the resoces that weren't modified
+		if _, ok := modified[name]; !ok {
+			continue
+		}
+		// hash our version in here and build the version map
+		//marshaledResource, err := MarshalResource(r)
+		//if err != nil {
+		//	return err
+		//}
+		v := uuid.New().String()
+		//v := HashResource(marshaledResource)
 		if v == "" {
 			return errors.New("failed to build resource version")
 		}
