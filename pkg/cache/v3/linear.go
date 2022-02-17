@@ -412,7 +412,7 @@ func (cache *LinearCache) CreateDeltaWatch(request *DeltaRequest, state stream.S
 	if response == nil {
 		watchID := cache.nextDeltaWatchID()
 		if cache.log != nil {
-			cache.log.Infof("[linear cache] nodeId is [%s] open delta watch ID:%d for %s Resources:%v, system version %q", watchID, request.GetNode().GetId(),
+			cache.log.Infof("[linear cache] nodeId is [%s] open delta watch ID:%d for %s Resources:%v, system version %q", request.GetNode().GetId(), watchID,
 				cache.typeURL, state.GetResourceVersions(), cache.getVersion())
 		}
 
