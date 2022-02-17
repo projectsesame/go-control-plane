@@ -21,6 +21,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	"github.com/envoyproxy/go-control-plane/pkg/cache/types"
 	"github.com/envoyproxy/go-control-plane/pkg/log"
 	"github.com/envoyproxy/go-control-plane/pkg/server/stream/v3"
@@ -48,6 +49,8 @@ type SnapshotCache interface {
 	// the version differs from the snapshot version.
 	SetSnapshot(ctx context.Context, node string, snapshot Snapshot) error
 
+	SetSnapshotReturnChangeCds(ctx context.Context, node string, snapshot Snapshot) ([]string, error)
+
 	// GetSnapshots gets the snapshot for a node.
 	GetSnapshot(node string) (Snapshot, error)
 
@@ -58,7 +61,7 @@ type SnapshotCache interface {
 	GetStatusInfo(string) StatusInfo
 
 	// UpdateNode replace node for a node ID
-	UpdateNode(nodeId string, request *Request) bool
+	UpdateNode(nodeId string, node *core.Node) bool
 
 	// GetStatusKeys retrieves node IDs for all statuses.
 	GetStatusKeys() []string
@@ -191,13 +194,93 @@ func (cache *snapshotCache) sendHeartbeats(ctx context.Context, node string) {
 }
 
 // SetSnapshotCacheContext updates a snapshot for a node.
+func (cache *snapshotCache) SetSnapshotReturnChangeCds(ctx context.Context, node string, snapshot Snapshot) ([]string, error) {
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+
+	// update the existing entry
+	cache.snapshots[node] = snapshot
+	var changeNames []string
+	// trigger existing watches for which version changed
+	if info, ok := cache.status[node]; ok {
+		info.mu.Lock()
+		defer info.mu.Unlock()
+		for id, watch := range info.watches {
+			version := snapshot.GetVersion(watch.Request.TypeUrl)
+			if version != watch.Request.VersionInfo {
+				cache.log.Debugf("respond open watch %d%v with new version %q", id, watch.Request.ResourceNames, version)
+
+				resources := snapshot.GetResourcesAndTTL(watch.Request.TypeUrl)
+				err := cache.respond(ctx, watch.Request, watch.Response, resources, version, false)
+				if err != nil {
+					return nil, err
+				}
+
+				// discard the watch
+				delete(info.watches, id)
+			}
+		}
+
+		// We only calculate version hashes when using delta. We don't
+		// want to do this when using SOTW so we can avoid unnecessary
+		// computational cost if not using delta.
+		if len(info.deltaWatches) > 0 {
+			err := snapshot.ConstructVersionMap()
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		// process our delta watches
+		for id, watch := range info.deltaWatches {
+			if watch.Request.TypeUrl == resource.ClusterType {
+				res, changeName, err := cache.respondDeltaReturnChangeResourceNameByTypeUrl(
+					ctx,
+					&snapshot,
+					watch.Request,
+					watch.Response,
+					watch.StreamState,
+				)
+				changeNames = changeName
+				if err != nil {
+					return changeNames, err
+				}
+				// If we detect a nil response here, that means there has been no state change
+				// so we don't want to respond or remove any existing resource watches
+				if res != nil {
+					delete(info.deltaWatches, id)
+				}
+			} else {
+				res, err := cache.respondDelta(
+					ctx,
+					&snapshot,
+					watch.Request,
+					watch.Response,
+					watch.StreamState,
+				)
+				if err != nil {
+					return nil, err
+				}
+				// If we detect a nil response here, that means there has been no state change
+				// so we don't want to respond or remove any existing resource watches
+				if res != nil {
+					delete(info.deltaWatches, id)
+				}
+			}
+
+		}
+	}
+
+	return changeNames, nil
+}
+
+// SetSnapshotCacheContext updates a snapshot for a node.
 func (cache *snapshotCache) SetSnapshot(ctx context.Context, node string, snapshot Snapshot) error {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
 
 	// update the existing entry
 	cache.snapshots[node] = snapshot
-
 	// trigger existing watches for which version changed
 	if info, ok := cache.status[node]; ok {
 		info.mu.Lock()
@@ -502,6 +585,32 @@ func (cache *snapshotCache) respondDelta(ctx context.Context, snapshot *Snapshot
 	return nil, nil
 }
 
+// Respond to a delta watch with the provided snapshot value. If the response is nil, there has been no state change.
+func (cache *snapshotCache) respondDeltaReturnChangeResourceNameByTypeUrl(ctx context.Context, snapshot *Snapshot, request *DeltaRequest, value chan DeltaResponse, state stream.StreamState) (*RawDeltaResponse, []string, error) {
+	resp := createDeltaResponse(ctx, request, state, resourceContainer{
+		resourceMap:   snapshot.GetResources(request.TypeUrl),
+		versionMap:    snapshot.GetVersionMap(request.TypeUrl),
+		systemVersion: snapshot.GetVersion(request.TypeUrl),
+	})
+
+	// Only send a response if there were changes
+	// We want to respond immediately for the first wildcard request in a stream, even if the response is empty
+	// otherwise, envoy won't complete initialization
+	if len(resp.Resources) > 0 || len(resp.RemovedResources) > 0 || (state.IsWildcard() && state.IsFirst()) {
+		if cache.log != nil {
+			cache.log.Debugf("node: %s, sending delta response with resources: %v removed resources %v wildcard: %t",
+				request.GetNode().GetId(), resp.Resources, resp.RemovedResources, state.IsWildcard())
+		}
+		select {
+		case value <- resp:
+			return resp, resp.ChangeResourceName, nil
+		case <-ctx.Done():
+			return resp, nil, context.Canceled
+		}
+	}
+	return nil, nil, nil
+}
+
 func (cache *snapshotCache) nextDeltaWatchID() int64 {
 	return atomic.AddInt64(&cache.deltaWatchCount, 1)
 }
@@ -558,7 +667,7 @@ func (cache *snapshotCache) GetStatusInfo(node string) StatusInfo {
 	return info
 }
 
-func (cache *snapshotCache) UpdateNode(nodeId string, request *Request) bool {
+func (cache *snapshotCache) UpdateNode(nodeId string, node *core.Node) bool {
 	cache.mu.RLock()
 	defer cache.mu.RUnlock()
 	info, exists := cache.status[nodeId]
@@ -566,7 +675,7 @@ func (cache *snapshotCache) UpdateNode(nodeId string, request *Request) bool {
 		cache.log.Warnf("node does not exist")
 		return false
 	}
-	info.UpdateNode(request.Node)
+	info.UpdateNode(node)
 	return true
 }
 

@@ -163,6 +163,9 @@ type RawDeltaResponse struct {
 
 	// Marshaled Resources to be included in the response.
 	marshaledResponse atomic.Value
+
+	//ChangeResourceName is changed resources name
+	ChangeResourceName []string
 }
 
 var _ Response = &RawResponse{}

@@ -33,6 +33,7 @@ func createDeltaResponse(ctx context.Context, req *DeltaRequest, state stream.St
 	nextVersionMap := make(map[string]string)
 	filtered := make([]types.Resource, 0, len(resources.resourceMap))
 	toRemove := make([]string, 0)
+	changeResourceName := make([]string, 0)
 
 	// If we are handling a wildcard request, we want to respond with all resources
 	switch {
@@ -45,6 +46,7 @@ func createDeltaResponse(ctx context.Context, req *DeltaRequest, state stream.St
 			prevVersion, found := state.GetResourceVersions()[name]
 			if !found || (prevVersion != nextVersionMap[name]) {
 				filtered = append(filtered, r)
+				changeResourceName = append(changeResourceName, name)
 			}
 		}
 	default:
@@ -53,6 +55,7 @@ func createDeltaResponse(ctx context.Context, req *DeltaRequest, state stream.St
 			if r, ok := resources.resourceMap[name]; ok {
 				nextVersion := resources.versionMap[name]
 				if prevVersion != nextVersion {
+					changeResourceName = append(changeResourceName, name)
 					filtered = append(filtered, r)
 				}
 				nextVersionMap[name] = nextVersion
@@ -68,16 +71,18 @@ func createDeltaResponse(ctx context.Context, req *DeltaRequest, state stream.St
 		// The prevVersion != "" check is in place to make sure we are only sending an update to the client once right after it is removed.
 		// If the client decides to keep the subscription we skip the add for every subsequent response.
 		if _, ok := resources.resourceMap[name]; !ok && prevVersion != "" {
+			changeResourceName = append(changeResourceName, name)
 			toRemove = append(toRemove, name)
 		}
 	}
 
 	return &RawDeltaResponse{
-		DeltaRequest:      req,
-		Resources:         filtered,
-		RemovedResources:  toRemove,
-		NextVersionMap:    nextVersionMap,
-		SystemVersionInfo: resources.systemVersion,
-		Ctx:               ctx,
+		DeltaRequest:       req,
+		Resources:          filtered,
+		RemovedResources:   toRemove,
+		NextVersionMap:     nextVersionMap,
+		SystemVersionInfo:  resources.systemVersion,
+		Ctx:                ctx,
+		ChangeResourceName: changeResourceName,
 	}
 }
