@@ -17,6 +17,7 @@ package cache
 import (
 	"context"
 	"fmt"
+	"github.com/envoyproxy/go-control-plane/pkg/resource/v3"
 	"sync"
 	"sync/atomic"
 	"time"
