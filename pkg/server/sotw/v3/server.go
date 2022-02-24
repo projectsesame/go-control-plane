@@ -18,6 +18,7 @@ package sotw
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"sync/atomic"
 
@@ -232,6 +233,8 @@ func (s *server) process(stream Stream, reqCh <-chan *discovery.DiscoveryRequest
 			if !more {
 				return status.Errorf(codes.Unavailable, "endpoints watch failed")
 			}
+			fmt.Print("reviced eds ======================")
+			fmt.Println()
 			nonce, err := send(resp)
 			if err != nil {
 				return err

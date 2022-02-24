@@ -21,6 +21,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/envoyproxy/go-control-plane/pkg/cache/types"
 	"github.com/envoyproxy/go-control-plane/pkg/log"
@@ -130,12 +131,16 @@ func (cache *LinearCache) respond(value chan Response, staleResources []string, 
 			}
 		}
 	}
+
+	time.Sleep(time.Second * 1)
+	cache.log.Infof("begin version is %s,chan length is %d", cache.getVersion(), len(value))
 	value <- &RawResponse{
 		Request:         &Request{TypeUrl: cache.typeURL},
 		Resources:       resources,
 		Version:         cache.getVersion(),
 		SnapshotVersion: snapshotVersion,
 	}
+	cache.log.Infof("end version is %s", cache.getVersion())
 }
 
 func (cache *LinearCache) notifyAll(modified map[string]struct{}, snapshotVersion string) {
