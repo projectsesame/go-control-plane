@@ -35,9 +35,6 @@ type StreamState struct { // nolint:golint,revive
 
 	// indicates whether the object has beed modified since its creation
 	first bool
-
-	// indicates whether we want an ordered ADS stream or not
-	ordered bool
 }
 
 // NewStreamState initializes a stream state with empty defaults.
@@ -47,7 +44,6 @@ func NewStreamState(wildcard bool, initialResourceVersions map[string]string) St
 		resourceVersions:   initialResourceVersions,
 		first:              true,
 		knownResourceNames: map[string]map[string]struct{}{},
-		ordered:            false, // Ordered comes from the first request since that's when we discover if they want ADS
 	}
 
 	if initialResourceVersions == nil {
@@ -77,13 +73,6 @@ func (s *StreamState) IsFirst() bool {
 // IsWildcard returns whether or not an xDS client requested in wildcard mode on the initial request.
 func (s *StreamState) IsWildcard() bool {
 	return s.wildcard
-}
-
-// IsOrdered returns wherther or not the current stream should run as an ordered ADS stream.
-// This means less backpressure relief but a guarantee of correct discovery response order.
-func (s *StreamState) IsOrdered(ordered bool) bool {
-	s.ordered = ordered
-	return ordered
 }
 
 // SetKnownResourceNames sets a list of resource names in a stream utilizing the SOTW protocol.
