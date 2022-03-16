@@ -103,7 +103,7 @@ func (s *server) process(str stream.Stream, reqCh chan *discovery.DiscoveryReque
 					}()
 
 					// Trigger a different code path specifically for ADS.
-					// We want resource orderingso things don't get sent before they should.
+					// We want resource ordering so things don't get sent before they should.
 					// This is a blocking call and will exit the process function
 					// on successful completion.
 					return s.processADS(&sw, reqCh, defaultTypeURL)

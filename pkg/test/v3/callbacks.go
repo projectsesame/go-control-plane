@@ -23,29 +23,34 @@ func (cb *Callbacks) Report() {
 	defer cb.mu.Unlock()
 	log.Printf("server callbacks fetches=%d requests=%d\n", cb.Fetches, cb.Requests)
 }
+
 func (cb *Callbacks) OnStreamOpen(_ context.Context, id int64, typ string) error {
 	if cb.Debug {
 		log.Printf("stream %d open for %s\n", id, typ)
 	}
 	return nil
 }
+
 func (cb *Callbacks) OnStreamClosed(id int64) {
 	if cb.Debug {
 		log.Printf("stream %d closed\n", id)
 	}
 }
+
 func (cb *Callbacks) OnDeltaStreamOpen(_ context.Context, id int64, typ string) error {
 	if cb.Debug {
 		log.Printf("delta stream %d open for %s\n", id, typ)
 	}
 	return nil
 }
+
 func (cb *Callbacks) OnDeltaStreamClosed(id int64) {
 	if cb.Debug {
 		log.Printf("delta stream %d closed\n", id)
 	}
 }
-func (cb *Callbacks) OnStreamRequest(int64, *discovery.DiscoveryRequest) error {
+
+func (cb *Callbacks) OnStreamRequest(id int64, req *discovery.DiscoveryRequest) error {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 	cb.Requests++
@@ -53,10 +58,20 @@ func (cb *Callbacks) OnStreamRequest(int64, *discovery.DiscoveryRequest) error {
 		close(cb.Signal)
 		cb.Signal = nil
 	}
+
+	if cb.Debug {
+		log.Printf("received request on stream %d for %s:%v", id, req.GetTypeUrl(), req.GetResourceNames())
+	}
+
 	return nil
 }
-func (cb *Callbacks) OnStreamResponse(context.Context, int64, *discovery.DiscoveryRequest, *discovery.DiscoveryResponse) {
+
+func (cb *Callbacks) OnStreamResponse(ctx context.Context, id int64, req *discovery.DiscoveryRequest, res *discovery.DiscoveryResponse) {
+	if cb.Debug {
+		log.Printf("responding on stream %d with %s:%s", id, res.GetVersionInfo(), res.GetTypeUrl())
+	}
 }
+
 func (cb *Callbacks) OnStreamDeltaResponse(id int64, req *discovery.DeltaDiscoveryRequest, res *discovery.DeltaDiscoveryResponse) {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
