@@ -14,10 +14,11 @@ import (
 func (s *server) processADS(sw *streamWrapper, reqCh chan *discovery.DiscoveryRequest, defaultTypeURL string) error {
 	// We make a responder channel here so we can multiplex responses from the dynamic channels.
 	sw.watches.addWatch(resource.AnyType, &watch{
-		cancel: nil,
-		nonce:  "",
 		// Create a buffered channel the size of the known resource types.
 		response: make(chan cache.Response, types.UnknownType),
+		cancel: func() {
+			close(sw.watches.responders[resource.AnyType].response)
+		},
 	})
 
 	process := func(resp cache.Response) error {
@@ -54,6 +55,11 @@ func (s *server) processADS(sw *streamWrapper, reqCh chan *discovery.DiscoveryRe
 		select {
 		case <-s.ctx.Done():
 			return nil
+		// We only watch the multiplexed channel since all values will come through from process.
+		case res := <-sw.watches.responders[resource.AnyType].response:
+			if err := process(res); err != nil {
+				return status.Errorf(codes.Unavailable, err.Error())
+			}
 		case req, ok := <-reqCh:
 			// Input stream ended or failed.
 			if !ok {
@@ -123,13 +129,6 @@ func (s *server) processADS(sw *streamWrapper, reqCh chan *discovery.DiscoveryRe
 					cancel:   s.cache.CreateWatch(req, sw.streamState, responder),
 					response: responder,
 				})
-			}
-
-		// We only watch the multiplexed channel since all values will come through from process.
-		case res := <-sw.watches.responders[resource.AnyType].response:
-			err := process(res)
-			if err != nil {
-				return status.Errorf(codes.Unavailable, err.Error())
 			}
 		}
 	}

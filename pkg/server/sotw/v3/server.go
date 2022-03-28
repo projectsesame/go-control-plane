@@ -124,6 +124,14 @@ func (s *streamWrapper) send(resp cache.Response) (string, error) {
 	return out.Nonce, s.stream.Send(out)
 }
 
+// Shutdown closes all open watches, and notifies API consumers the stream has closed.
+func (s *streamWrapper) shutdown() {
+	s.watches.close()
+	if s.callbacks != nil {
+		s.callbacks.OnStreamClosed(s.ID)
+	}
+}
+
 // Discovery response that is sent over GRPC stream.
 // We need to record what resource names are already sent to a client
 // So if the client requests a new name we can respond back

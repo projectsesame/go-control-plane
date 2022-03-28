@@ -59,18 +59,10 @@ func (cb *Callbacks) OnStreamRequest(id int64, req *discovery.DiscoveryRequest) 
 		close(cb.Signal)
 		cb.Signal = nil
 	}
-
-	if cb.Debug {
-		log.Printf("received request on stream %d for %s:%v", id, req.GetTypeUrl(), req.GetResourceNames())
-	}
-
 	return nil
 }
 
 func (cb *Callbacks) OnStreamResponse(ctx context.Context, id int64, req *discovery.DiscoveryRequest, res *discovery.DiscoveryResponse) {
-	if cb.Debug {
-		log.Printf("responding on stream %d with %s:%s", id, res.GetVersionInfo(), res.GetTypeUrl())
-	}
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 	cb.Responses++
