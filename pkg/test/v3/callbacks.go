@@ -13,6 +13,7 @@ type Callbacks struct {
 	Debug          bool
 	Fetches        int
 	Requests       int
+	Responses      int
 	DeltaRequests  int
 	DeltaResponses int
 	mu             sync.Mutex
@@ -21,7 +22,7 @@ type Callbacks struct {
 func (cb *Callbacks) Report() {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
-	log.Printf("server callbacks fetches=%d requests=%d\n", cb.Fetches, cb.Requests)
+	log.Printf("server callbacks fetches=%d requests=%d responses=%d\n", cb.Fetches, cb.Requests, cb.Responses)
 }
 
 func (cb *Callbacks) OnStreamOpen(_ context.Context, id int64, typ string) error {
@@ -70,6 +71,9 @@ func (cb *Callbacks) OnStreamResponse(ctx context.Context, id int64, req *discov
 	if cb.Debug {
 		log.Printf("responding on stream %d with %s:%s", id, res.GetVersionInfo(), res.GetTypeUrl())
 	}
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+	cb.Responses++
 }
 
 func (cb *Callbacks) OnStreamDeltaResponse(id int64, req *discovery.DeltaDiscoveryRequest, res *discovery.DeltaDiscoveryResponse) {

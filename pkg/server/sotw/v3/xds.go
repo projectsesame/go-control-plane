@@ -64,7 +64,7 @@ func (s *server) process(str stream.Stream, reqCh chan *discovery.DiscoveryReque
 		// Case 1 handles any request inbound on the stream
 		// and handles all initialization as needed
 		case 1:
-			// input stream ended or errored out
+			// input stream ended or failed
 			if !ok {
 				return nil
 			}

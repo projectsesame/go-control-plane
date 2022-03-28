@@ -25,6 +25,7 @@ node:
 static_resources:
   clusters:
   - connect_timeout: 30s
+    dns_lookup_family: V4_PREFERRED
     load_assignment:
       cluster_name: xds_cluster
       endpoints:
@@ -37,6 +38,7 @@ static_resources:
     http2_protocol_options: {}
     name: xds_cluster
   - connect_timeout: 30s
+    dns_lookup_family: V4_PREFERRED
     load_assignment:
       cluster_name: als_cluster
       endpoints:
