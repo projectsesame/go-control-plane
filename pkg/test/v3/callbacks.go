@@ -59,6 +59,10 @@ func (cb *Callbacks) OnStreamRequest(id int64, req *discovery.DiscoveryRequest) 
 		close(cb.Signal)
 		cb.Signal = nil
 	}
+	if cb.Debug {
+		log.Printf("received request for %s on stream %d", req.GetTypeUrl(), id)
+	}
+
 	return nil
 }
 
@@ -66,6 +70,9 @@ func (cb *Callbacks) OnStreamResponse(ctx context.Context, id int64, req *discov
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 	cb.Responses++
+	if cb.Debug {
+		log.Printf("responding to request for %s on stream %d", req.GetTypeUrl(), id)
+	}
 }
 
 func (cb *Callbacks) OnStreamDeltaResponse(id int64, req *discovery.DeltaDiscoveryRequest, res *discovery.DeltaDiscoveryResponse) {
