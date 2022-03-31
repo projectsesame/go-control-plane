@@ -113,7 +113,7 @@ func NewLinearCache(typeURL string, opts ...LinearCacheOption) *LinearCache {
 	return out
 }
 
-func (cache *LinearCache) respond(value chan Response, staleResources []string, snapshotVersion string) {
+func (cache *LinearCache) respond(value chan Response, staleResources []string) {
 	var resources []types.ResourceWithTTL
 	// TODO: optimize the resources slice creations across different clients
 	if len(staleResources) == 0 {
@@ -131,14 +131,13 @@ func (cache *LinearCache) respond(value chan Response, staleResources []string, 
 		}
 	}
 	value <- &RawResponse{
-		Request:         &Request{TypeUrl: cache.typeURL},
-		Resources:       resources,
-		Version:         cache.getVersion(),
-		SnapshotVersion: snapshotVersion,
+		Request:   &Request{TypeUrl: cache.typeURL},
+		Resources: resources,
+		Version:   cache.getVersion(),
 	}
 }
 
-func (cache *LinearCache) notifyAll(modified map[string]struct{}, snapshotVersion string) {
+func (cache *LinearCache) notifyAll(modified map[string]struct{}) {
 	// de-duplicate watches that need to be responded
 	notifyList := make(map[chan Response][]string)
 	for name := range modified {
@@ -148,10 +147,10 @@ func (cache *LinearCache) notifyAll(modified map[string]struct{}, snapshotVersio
 		delete(cache.watches, name)
 	}
 	for value, stale := range notifyList {
-		cache.respond(value, stale, snapshotVersion)
+		cache.respond(value, stale)
 	}
 	for value := range cache.watchAll {
-		cache.respond(value, nil, snapshotVersion)
+		cache.respond(value, nil)
 	}
 	cache.watchAll = make(watches)
 
@@ -200,12 +199,12 @@ func (cache *LinearCache) UpdateResource(name string, res types.Resource) error 
 	cache.resources[name] = res
 
 	// TODO: batch watch closures to prevent rapid updates
-	cache.notifyAll(map[string]struct{}{name: {}}, "")
+	cache.notifyAll(map[string]struct{}{name: {}})
 
 	return nil
 }
 
-func (cache *LinearCache) UpdateResourceWithVersion(name string, res types.Resource, snapshotVersion string) (uint64, error) {
+func (cache *LinearCache) UpdateResourceWithVersion(name string, res types.Resource) (uint64, error) {
 	if res == nil {
 		return 0, errors.New("nil resource")
 	}
@@ -217,7 +216,7 @@ func (cache *LinearCache) UpdateResourceWithVersion(name string, res types.Resou
 	cache.resources[name] = res
 
 	// TODO: batch watch closures to prevent rapid updates
-	cache.notifyAll(map[string]struct{}{name: {}}, snapshotVersion)
+	cache.notifyAll(map[string]struct{}{name: {}})
 
 	return cache.version, nil
 }
@@ -232,7 +231,7 @@ func (cache *LinearCache) DeleteResource(name string) error {
 	delete(cache.resources, name)
 
 	// TODO: batch watch closures to prevent rapid updates
-	cache.notifyAll(map[string]struct{}{name: {}}, "")
+	cache.notifyAll(map[string]struct{}{name: {}})
 	return nil
 }
 
@@ -264,7 +263,7 @@ func (cache *LinearCache) SetResources(resources map[string]types.Resource) {
 		modified[name] = struct{}{}
 	}
 
-	cache.notifyAll(modified, "")
+	cache.notifyAll(modified)
 }
 
 // GetResources returns current resources stored in the cache
@@ -319,7 +318,7 @@ func (cache *LinearCache) CreateWatch(request *Request, streamState stream.Strea
 		}
 	}
 	if stale {
-		cache.respond(value, staleResources, "")
+		cache.respond(value, staleResources)
 		return nil
 	}
 	// Create open watches since versions are up to date.
