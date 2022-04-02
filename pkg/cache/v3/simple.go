@@ -231,10 +231,17 @@ func (cache *snapshotCache) SetSnapshot(ctx context.Context, node string, snapsh
 	if info, ok := cache.status[node]; ok {
 		info.mu.Lock()
 		defer info.mu.Unlock()
-		for id, watch := range info.watches {
+
+		// If ADS is enabled we need to order response watches so we guarantee
+		// sending them in the correct order since Go's default implementation
+		// of maps are randomized order when ranged over.
+		info.orderResponseWatches(cache.ads)
+
+		for _, key := range info.orderedWatches {
+			watch := info.watches[key.ID]
 			version := snapshot.GetVersion(watch.Request.TypeUrl)
 			if version != watch.Request.VersionInfo {
-				cache.log.Debugf("respond open watch %d%v with new version %q", id, watch.Request.ResourceNames, version)
+				cache.log.Debugf("respond open watch %d %s%v with new version %q", key.ID, watch.Request.TypeUrl, watch.Request.ResourceNames, version)
 
 				resources := snapshot.GetResourcesAndTTL(watch.Request.TypeUrl)
 				err := cache.respond(ctx, watch.Request, watch.Response, resources, version, false)
@@ -243,7 +250,7 @@ func (cache *snapshotCache) SetSnapshot(ctx context.Context, node string, snapsh
 				}
 
 				// discard the watch
-				delete(info.watches, id)
+				delete(info.watches, key.ID)
 			}
 		}
 
